@@ -1,0 +1,401 @@
+now lets test the performance of the correct version
+run it with different concurrency levels and measure rps median and p99 latency
+increase the concurrency step by step and find where the latency starts getting worse
+dont change the code while testing
+just run the test and show me the results
+
+
+
+
+
+Show more
+
+Saturday 8:26 PM
+
+
+
+
+
+
+Worked for 2m 17s
+
+
+
+Performance test completed with unchanged code. Each level used a fresh 100-ticket sale and 100 unique /buy requests; every run issued exactly 100 tickets with zero failures.
+Concurrency	RPS	Median	p99
+1	49.68	18.97 ms	31.85 ms
+5	83.58	49.80 ms	230.15 ms
+10	64.26	120.16 ms	362.69 ms
+25	48.49	351.04 ms	1574.28 ms
+50	105.99	352.60 ms	834.40 ms
+75	99.19	523.22 ms	897.65 ms
+100	109.12	620.33 ms	793.25 ms
+150	71.11	880.14 ms	1264.18 ms
+200	47.95	1231.52 ms	1876.98 ms
+250	50.38	1138.71 ms	1740.84 ms
+
+
+Latency starts worsening noticeably after concurrency 10, and becomes clearly degraded by 25 concurrent requests:
+- At 10: median 120 ms, p99 363 ms
+- At 25: median 351 ms, p99 1.57 s
+- At 100: throughput peaks around 109 RPS, but median is 620 ms
+- At 200+: throughput falls while latency rises, indicating saturation/queueing
+So, for this local single-instance benchmark, the practical low-latency region is roughly up to 10 concurrent buyers. Around 25, the system begins trading latency heavily for contention. The highest observed throughput was ~109 RPS at concurrency 100, but with substantially worse response times.
+No overselling, duplicate ticket numbers, duplicate request records, or failed requests occurred in the benchmark. The temporary server has been stopped.
+
+
+Saturday 8:28 PM
+
+
+
+
+
+
+
+now lets do one additional feature from the assignment
+lets try running 3 seller instances using the same postgres database and test concurrent /buy requests across all 3
+dont add any other features for now
+
+
+
+
+
+Show more
+
+Saturday 8:36 PM
+
+
+
+
+
+
+I’ll run three independent FastAPI processes against the same PostgreSQL database and distribute concurrent buys across them. One infrastructure adjustment is necessary first: application startup must create missing tables without dropping shared tables, otherwise each instance could erase another instance’s state during startup.
+
+
+
+
+Edited files
+
+
+The multi-instance runner and safe startup behavior pass lint and tests. I’m starting sellers on ports 8000, 8001, and 8002, all using the same .env database URL, then I’ll distribute 500 concurrent buys evenly among them.
+
+
+
+
+The three-instance capacity test passed. I’m adding duplicate-request replay to the multi-instance test itself so the final result also proves idempotency survives routing a retry to a different seller instance.
+
+
+
+
+Edited file
+
+run_three_instance_load.py+14-3
+
+
+
+
+
+
+
+
+
+
+The cross-instance replay run passed: duplicate requests were deliberately routed to a different port than their originals, and no duplicate tickets or request records were created. I’m fixing one formatting-only issue in the test script and stopping all three temporary sellers.
+
+
+
+
+Edited file
+
+run_three_instance_load.py+4-2
+
+
+
+
+
+
+
+
+
+
+
+You've hit your usage limit. Upgrade your plan to continue, or try again later.
+
+
+
+
+
+
+  Edited 3 files+93-4Review changesUndoReview
+
+scripts/run_server.pyscripts/run_server.py+6-2
+scripts/run_three_instance_load.pyscripts/run_three_instance_load.py+86-0
+src/ticket_stampede/service.pysrc/ticket_stampede/service.py+1-2
+
+
+
+
+
+
+
+continue
+
+
+
+
+
+
+
+Saturday 8:42 PM
+
+
+
+
+
+
+Worked for 23s
+
+
+
+Three seller instances were run on ports 8000, 8001, and 8002, all sharing the same PostgreSQL database.
+The 500 concurrent buys were balanced across them:
+Instance	Requests
+:8000	167
+:8001	167
+:8002	166
+
+
+Results:
+Metric	Result
+Requests sent	500
+Unique request IDs	451
+Concurrent clients	250
+Issued responses	111
+Sold-out responses	389
+Failed responses	0
+Throughput	67.49 RPS
+Ticket capacity	100
+Actual issued tickets from /status	100
+Duplicate ticket numbers	None
+Duplicate request IDs in final issued tickets	None
+Oversold	No
+
+
+The 111 issued responses are correct: 11 are deliberate duplicate request-ID replays, which returned an already-issued ticket rather than creating another one. Those replayed requests were routed round-robin, so they exercised cross-instance idempotency.
+A required infrastructure correction was made: startup now only creates missing tables and does not drop shared schema/data. Without that, one of three instances could erase state when it starts. No extra product features were added.
+Relevant additions: [run_server.py](C:/Users/Vedha/thuli/scripts/run_server.py) supports --port; [run_three_instance_load.py](C:/Users/Vedha/thuli/scripts/run_three_instance_load.py) runs the distributed test. Ruff and pytest pass, and all temporary seller processes have been stopped.
+
+
+Saturday 8:43 PM
+
+
+
+
+
+
+
+dont add any more features
+now check the whole project against the assignment and tell me what is still missing for submission
+also check the readme decisions md and logs requirements
+dont change anything yet just tell me what is missing
+
+
+
+
+
+Show more
+
+Saturday 8:48 PM
+
+
+
+
+
+
+Worked for 35s
+
+
+
+The core correct seller is substantially complete, but it is not submission-ready yet.
+Required assignment items still missing
+Requirement	Status	What is missing
+/reset, /buy, /status	Present	Core endpoints are implemented
+Four invariants under load	Demonstrated	Correct single- and three-instance runs were performed
+Buyer load client	Present	It sends concurrency/replays and verifies final-state invariants
+Buyer reports RPS, median, p99	Incomplete	Current load scripts report RPS, but not median/p99. The ad-hoc benchmark measured them, but that logic is not in the reusable buyer script
+Naive version first, failing run, then fixed run	Incomplete	The original unsafe baseline was replaced. You have the observed failing result in this chat, but the repository no longer contains the naive implementation or a saved failing-run artifact
+Passing run documented	Incomplete	The passing results are not saved in a report/write-up
+DECISIONS.md, maximum two pages	Missing	No DECISIONS.md exists
+Full AI coding-session logs under /logs	Missing	No logs/ directory exists. server*.log files are Uvicorn runtime logs, not the required AI-session transcripts
+Clean-machine README	Incomplete	It gives basic setup, but needs exact PostgreSQL setup, all run/test commands, environment-variable guidance, and the expected outputs
+Three separate seller instances behind LB/no shared app lock	Partially complete	Three independent instances were successfully tested against shared PostgreSQL. However, requests were distributed by the load client, not through an actual load balancer
+Explain degradation/bottleneck with evidence	Missing	We measured degradation, but there is no documented diagnosis or PostgreSQL/server metrics proving the bottleneck
+
+
+Important code/project gaps
+- The load script is still named [`run_naive_load.py`](C:\\Users\\Vedha\\thuli\\scripts\\run_naive_load.py), but it now exercises the correct implementation. That will confuse reviewers.
+- Its docstring still says it “exposes the deliberately unsafe” implementation.
+- The correct version has no formal pytest integration tests for the concurrency invariants. The edge-case and load scripts are useful, but submission quality would be stronger with automated pytest tests for:
+  - concurrent duplicate request ID;
+  - exactly capacity buys;
+  - over-capacity buys;
+  - retry after completion;
+  - cross-user request-ID reuse;
+  - three-instance-safe behavior.
+- Schema is initialized through metadata.create_all() at app startup. This is acceptable for a prototype, but Alembic is installed and unused; a migration is more credible for a database-backed submission.
+- /reset deletes all tables’ rows. It works for normal test sequencing, but is unsafe if called while buys are actively in flight. This should be named as a known limitation in DECISIONS.md, unless you choose to solve it.
+- The current /status implementation correctly derives its count from issued purchase records, but the README does not explain that crucial design decision.
+- server*.log and __pycache__ files are currently visible in the workspace. They should not be treated as deliverable evidence; the final repository should contain intentional artifacts only.
+README gaps
+The current [README.md](C:/Users/Vedha/thuli/README.md) should still add:
+- Database creation commands or a clear prerequisite path.
+- Exact server startup command and API examples for /reset, /buy, /status.
+- Commands for:
+  - unit/integration tests;
+  - edge-case test;
+  - buyer/load test;
+  - three-instance test.
+- Expected pass criteria: number_sold == capacity, no duplicate tickets/request records, no oversell.
+- A short explanation of DATABASE_URL versus TEST_DATABASE_URL.
+- A note that Windows uses the provided server launcher because async psycopg requires the selector event loop.
+- A short “known limitations” section.
+DECISIONS.md must cover
+Within two pages:
+- Why FastAPI + PostgreSQL + SQLAlchemy/psycopg were chosen and what was rejected.
+- Naive check-then-act failure: 238 actual tickets for capacity 100, duplicate ticket numbers, duplicate request IDs, stale counter.
+- Correct mechanism: inventory rows, request-id primary key, unique ticket assignment, transaction, FOR UPDATE SKIP LOCKED.
+- Trade-offs: PostgreSQL is the coordination point; SKIP LOCKED favors throughput; no separate mutable sold counter.
+- Test evidence: naive failure, corrected load/edge tests, three-instance result.
+- Performance result and honest limitation: latency rises materially around 25+ concurrency; no database observability evidence yet.
+- Reset-during-active-sale limitation.
+- What you would do with two more weeks.
+The mandatory submission blockers are DECISIONS.md, /logs AI transcripts, reusable median/p99 reporting in the buyer, and a README that runs the complete submission from a clean checkout.
+
+
+Saturday 8:49 PM
+
+
+
+
+
+
+
+check what is missing and tell me what you will change
+dont change anything yet
+
+
+
+
+
+
+
+Saturday 9:03 PM
+
+
+
+
+
+
+I would make only these submission-focused changes:
+1. Rename the misleading load script.
+   - run_naive_load.py → run_load.py
+   - Update its docstring and README references so it describes the correct seller, not the removed naive baseline.
+2. Preserve the naive-vs-correct evidence.
+   - Add a concise saved report containing the actual baseline failure:
+     - 500 requests
+     - 238 ticket rows for capacity 100
+     - duplicated ticket numbers
+     - duplicated request IDs
+     - stale counter at 100
+   - Add the corrected passing runs, edge-case results, three-instance result, and performance table.
+3. Add DECISIONS.md within two pages.
+It would explain:
+- stack choice;
+- naive failure mechanism;
+- why PostgreSQL constraints + inventory row locking fix it;
+- trade-offs;
+- test evidence;
+- observed performance degradation;
+- known limits, especially /reset during active buys;
+- next steps.
+4. Add the required /logs folder.
+   - Place the exported AI coding-session transcript(s) there.
+   - The existing server*.log files are runtime logs, so I would not present them as AI session logs.
+5. Complete the README for a clean checkout.
+Add exact commands for:
+- creating/configuring PostgreSQL;
+- copying/configuring .env;
+- installing dependencies;
+- running the seller;
+- running pytest;
+- running edge-case tests;
+- running the buyer/load experiment;
+- starting three seller instances and running the distributed test.
+Also add expected success criteria and note the Windows server-launch command.
+6. Make the buyer report median and p99 itself.
+   - The benchmark measured median/p99, but the reusable buyer script currently only reports RPS.
+   - I would integrate latency capture and percentiles into the standard load script, so one command produces every assignment-required metric.
+7. Add automated integration tests for the demonstrated invariants.
+Convert the current executable edge-case checks into pytest integration tests:
+- concurrent duplicate request ID;
+- exactly 100 successful buys;
+- over-capacity concurrent buys;
+- retry after success;
+- same request ID reused by another user;
+- optionally, same test routed across three local processes.
+8. Add a small reproducibility cleanup.
+   - Ensure temporary server*.log, caches, and __pycache__ are ignored/not included in the final submission.
+   - Keep intentional artifacts only: source, tests, reports, write-up, and /logs.
+I would not add waitlists, datastore-kill recovery, a real reverse proxy/load balancer, or other optional features unless you explicitly choose one.
+
+
+Saturday 9:03 PM
+
+
+
+
+
+
+
+proceed
+
+
+
+
+
+
+
+Saturday 9:11 PM
+
+
+
+
+
+
+Worked for 6m 11s
+
+
+
+Submission-readiness updates are complete.
+- Added formal PostgreSQL invariant tests: concurrent duplicate IDs, exact capacity, over-capacity buys, replay, and cross-user ID reuse.
+- Replaced the misleading run_naive_load.py name with [run_load.py](C:\\Users\\Vedha\\thuli\\scripts\\run_load.py), which reports RPS, median/p99 latency, duplicate checks, oversell, and final status.
+- Added [DECISIONS.md](C:\\Users\\Vedha\\thuli\\DECISIONS.md) (582 words, under two pages) and [REPORT.md](C:\\Users\\Vedha\\thuli\\REPORT.md) with the actual naive failure and corrected/three-process results.
+- Expanded [README.md](C:\\Users\\Vedha\\thuli\\README.md) with clean setup, verification, workload, and three-instance instructions.
+- Added [logs/README.md](C:\\Users\\Vedha\\thuli\\logs\\README.md) explaining the required transcript handoff.
+- Ignored local server*.log runtime outputs and removed an unused naive-config field.
+Verification passed:
+Ruff: all checks passed
+Pytest: 6 passed in 3.15s
+One required submission action remains outside the codebase: export the Codex/AI session transcript and place it in logs/. The existing server logs are runtime logs, not the assignment-required session transcript.
+
+  Edited 10 files+431-135Review changesUndoReview
+
+.gitignore.gitignore+1-0
+scripts/run_load.pyscripts/run_load.py+125-0
+scripts/run_naive_load.pyscripts/run_naive_load.py+0-113
+Show 7 more files
+
+
+
+
+Saturday 9:17 PM
