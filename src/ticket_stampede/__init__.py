@@ -1,0 +1,2 @@
+"""Ticket Stampede application package."""
+
